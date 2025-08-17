@@ -32,7 +32,7 @@ extern gboolean show_confirm_dialog(GtkWindow* parent, const gchar* title, const
 extern void show_message_dialog(GtkWindow* parent, ExceptionType type,
                                const gchar* title, const gchar* message);
 
-// 输出异常信息
-extern void output_exception_message(ExceptionType type, const gchar* message);
+// 输出异常信息（内部逻辑使用标准类型）
+extern void output_exception_message(ExceptionType type, const char* message);
 
 #endif // OUTPUT_EXCEPTION_H

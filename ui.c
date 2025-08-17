@@ -1265,7 +1265,7 @@ void on_about(GtkWidget* widget, gpointer data)
     gtk_about_dialog_set_license_type(GTK_ABOUT_DIALOG(about_dialog), GTK_LICENSE_MIT_X11);
 
     // 设置网站信息
-    gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(about_dialog), "https://github.com/Ganyu-1202");
+    gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(about_dialog), "https://github.com/Ganyu-1202/Notepad");
     gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(about_dialog), "访问项目主页");
 
     // 设置作者信息

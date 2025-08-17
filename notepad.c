@@ -5,6 +5,7 @@
 #include "notepad.h"
 #include "ui.h"
 #include <stdlib.h>
+#include <string.h>
 #include "file_operations.h"
 #include "output_exception.h"
 
@@ -14,8 +15,8 @@ NotepadApp* notepad_app_new(void)
     NotepadApp* app = (NotepadApp*)malloc(sizeof(NotepadApp));
     app->ui = (NotepadUI*)malloc(sizeof(NotepadUI));
     app->filename = NULL;
-    app->is_modified = FALSE;
-    app->is_saved = TRUE;
+    app->is_modified = false;       // 使用标准bool
+    app->is_saved = true;           // 使用标准bool
 
     // 初始化UI属性
     app->ui->window = NULL;
@@ -49,7 +50,7 @@ void notepad_app_free(NotepadApp* app)
     {
         if (app->filename)
         {
-            g_free(app->filename);
+            free(app->filename);    // 使用标准free而非g_free
         }
         if (app->ui)
         {
@@ -79,7 +80,7 @@ void notepad_app_run(NotepadApp* app)
     gtk_main();
 }
 
-void notepad_set_modified(NotepadApp* app, gboolean modified)
+void notepad_set_modified(NotepadApp* app, bool modified)
 {
     app->is_modified = modified;
 
@@ -101,10 +102,10 @@ void notepad_set_modified(NotepadApp* app, gboolean modified)
     }
 }
 
-gboolean notepad_check_save_changes(NotepadApp* app)
+bool notepad_check_save_changes(NotepadApp* app)
 {
     if (!app->is_modified)
-        return TRUE; // 没有修改，直接返回
+        return true; // 没有修改，直接返回
 
     GtkWidget* dialog = gtk_message_dialog_new(
         GTK_WINDOW(app->ui->window),
@@ -135,11 +136,11 @@ gboolean notepad_check_save_changes(NotepadApp* app)
 
                 if (saved)
                 {
-                    notepad_set_modified(app, FALSE);
-                    return TRUE; // 保存成功
+                    notepad_set_modified(app, false);  // 使用标准bool
+                    return true; // 保存成功
                 }
                 gtk_widget_show_all(app->ui->window); // 显示错误信息
-                return FALSE; // 保存失败
+                return false; // 保存失败
             }
             else
             {
@@ -148,10 +149,10 @@ gboolean notepad_check_save_changes(NotepadApp* app)
                 return !app->is_modified;
             }
         case GTK_RESPONSE_NO:
-            return TRUE; // 不保存，直接返回
+            return true; // 不保存，直接返回
         case GTK_RESPONSE_CANCEL:
         default:
-            return FALSE; // 取消操作
+            return false; // 取消操作
     }
 }
 

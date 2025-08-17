@@ -1,6 +1,7 @@
 #ifndef UI_H
 #define UI_H
 
+#include <stdint.h>
 #include <gtk/gtk.h>
 
 // 前向声明
@@ -13,12 +14,12 @@ typedef enum
     UNDO_DELETE
 } UndoType;
 
-// 撤销操作结构
+// 撤销操作结构（内部逻辑使用标准类型）
 typedef struct UndoAction
 {
     UndoType type;
-    gint position;
-    gchar* text;
+    int32_t position;       // 使用标准int32_t
+    char* text;             // 使用标准char*
     struct UndoAction* next;
 } UndoAction;
 
@@ -84,8 +85,8 @@ extern void on_replace_all(GtkWidget* widget, gpointer data);
 
 extern void on_close_find_replace(GtkWidget* widget, gpointer data);
 
-// 撤销/重做相关
-extern void push_undo_action(NotepadApp* app, UndoType type, gint position, const gchar* text);
+// 撤销/重做相关（内部逻辑使用标准类型）
+extern void push_undo_action(NotepadApp* app, UndoType type, int32_t position, const char* text);
 
 extern void clear_undo_stack(UndoAction** stack);
 

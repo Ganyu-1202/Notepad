@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdint.h>
 #include <gtk/gtk.h>
 #include "notepad.h"
 #include "ui.h"
