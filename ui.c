@@ -83,6 +83,9 @@ void setup_main_window(NotepadApp* app)
     GtkWidget* menu_bar = create_menu_bar(app, accel_group);
     gtk_box_pack_start(GTK_BOX(vbox), menu_bar, FALSE, FALSE, 0);
 
+    const gchar* icon_path = "../notepad.png";
+    gtk_window_set_icon_from_file(GTK_WINDOW(app->ui->window), icon_path, NULL);
+
     // 创建查找和替换栏，默认不可见
     app->ui->find_replace_bar = create_find_replace_bar(app);
     gtk_box_pack_start(GTK_BOX(vbox), app->ui->find_replace_bar, FALSE, FALSE, 0);
