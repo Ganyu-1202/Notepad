@@ -35,6 +35,7 @@ typedef struct NotepadUI
     GtkWidget* find_replace_bar;
     GtkWidget* find_entry;
     GtkWidget* replace_entry;
+    GtkWidget* case_sensitive_check;
     gboolean find_replace_visible;
 
     // 撤销/重做相关

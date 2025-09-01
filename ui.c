@@ -309,6 +309,11 @@ GtkWidget* create_find_replace_bar(NotepadApp* app)
     GtkWidget* replace_all_button = gtk_button_new_with_label("全部替换");
     GtkWidget* close_button = gtk_button_new_with_label("关闭");
 
+    // 区分大小写 复选框
+    GtkWidget* case_sensitive_check = gtk_check_button_new_with_label("区分大小写");
+    gtk_box_pack_start(GTK_BOX(bar), case_sensitive_check, FALSE, FALSE, 0);
+    app->ui->case_sensitive_check = case_sensitive_check;
+
     // 连接信号
     g_signal_connect(find_next_button, "clicked", G_CALLBACK(on_find_next), app);
     g_signal_connect(replace_button, "clicked", G_CALLBACK(on_replace), app);
@@ -496,6 +501,11 @@ void on_find_next(GtkWidget* widget, gpointer data)
 {
     NotepadApp* app = (NotepadApp*)data;
     const gchar* search_text = gtk_entry_get_text(GTK_ENTRY(app->ui->find_entry));
+    gboolean case_sensitive = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(app->ui->case_sensitive_check));
+    GtkTextSearchFlags flags = GTK_TEXT_SEARCH_TEXT_ONLY;
+
+    if (!case_sensitive)
+        flags |= GTK_TEXT_SEARCH_CASE_INSENSITIVE;
 
     if (g_utf8_strlen(search_text, -1) == 0)
     {
@@ -514,7 +524,7 @@ void on_find_next(GtkWidget* widget, gpointer data)
     }
 
     // 从当前位置向前搜索
-    if (gtk_text_iter_forward_search(&start, search_text, GTK_TEXT_SEARCH_TEXT_ONLY,
+    if (gtk_text_iter_forward_search(&start, search_text, flags,
                                      &match_start, &match_end, NULL))
     {
         gtk_text_buffer_select_range(app->ui->buffer, &match_start, &match_end);
@@ -524,7 +534,7 @@ void on_find_next(GtkWidget* widget, gpointer data)
     {
         // 从文档开头重新搜索
         gtk_text_buffer_get_start_iter(app->ui->buffer, &start);
-        if (gtk_text_iter_forward_search(&start, search_text, GTK_TEXT_SEARCH_TEXT_ONLY,
+        if (gtk_text_iter_forward_search(&start, search_text, flags,
                                          &match_start, &match_end, NULL))
         {
             gtk_text_buffer_select_range(app->ui->buffer, &match_start, &match_end);
