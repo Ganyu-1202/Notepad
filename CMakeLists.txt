@@ -20,6 +20,8 @@ add_executable(Notepad
         editor_decorations.c
         document_encoding.c
         font_dialog.c
+        font_picker.c
+        tab_settings.c
         file_operations.c
         output_exception.h
         output_exception.c)
@@ -29,7 +31,7 @@ include(CTest)
 if (BUILD_TESTING)
         add_executable(NotepadAppearanceTest
                 tests/appearance_test.c
-                notepad.c ui.c appearance.c editor_decorations.c document_encoding.c font_dialog.c file_operations.c output_exception.c)
+                notepad.c ui.c appearance.c editor_decorations.c document_encoding.c font_dialog.c font_picker.c tab_settings.c file_operations.c output_exception.c)
         target_include_directories(NotepadAppearanceTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
         target_link_libraries(NotepadAppearanceTest ${GTK3_LIBRARIES})
         add_test(NAME appearance COMMAND NotepadAppearanceTest)

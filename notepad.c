@@ -37,6 +37,7 @@ NotepadApp* notepad_app_new(void)
     app->ui->undo_stack = NULL;
     app->ui->redo_stack = NULL;
     app->ui->recording_changes = TRUE;
+    app->ui->tab_space_count = 4;
 
     // 初始化字体设置 - 设置支持中文的字体
     app->ui->primary_font = g_strdup("Microsoft YaHei 12");

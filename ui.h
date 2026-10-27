@@ -51,6 +51,8 @@ typedef struct NotepadUI
     GtkWidget* line_numbers;
     bool show_line_numbers;
     bool frame_selected_lines;
+    bool tab_inserts_spaces;
+    int tab_space_count;
     GtkWidget* background_area;
     GtkCssProvider* appearance_provider;
     bool dark_mode;
@@ -132,6 +134,9 @@ extern void refresh_editor_decorations(NotepadApp* app);
 extern void on_line_numbers_toggled(GtkCheckMenuItem* item, gpointer data);
 extern void on_line_frame_toggled(GtkCheckMenuItem* item, gpointer data);
 extern gboolean get_framed_line_range(NotepadApp* app, int* first, int* last);
+
+extern void on_tab_settings(GtkWidget* widget, gpointer data);
+extern gboolean on_editor_tab_key(GtkWidget* widget, GdkEventKey* event, gpointer data);
 
 // 关于对话框
 extern void on_about(GtkWidget* widget, gpointer data);

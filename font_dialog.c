@@ -1,4 +1,5 @@
 #include "notepad.h"
+#include "font_picker.h"
 #include <string.h>
 
 typedef struct
@@ -173,111 +174,6 @@ static GtkWidget* create_font_combo(void)
     return combo;
 }
 
-static gboolean event_over_scrollbar(GtkWidget* bar, GdkEventButton* event)
-{
-    if (!gtk_widget_get_mapped(bar))
-    {
-        return FALSE;
-    }
-    GtkWidget* popup = gtk_widget_get_toplevel(bar);
-    gint x, y, root_x, root_y;
-    if (!gtk_widget_translate_coordinates(bar, popup, 0, 0, &x, &y))
-    {
-        return FALSE;
-    }
-    gdk_window_get_origin(gtk_widget_get_window(popup), &root_x, &root_y);
-    return event->x_root >= root_x + x &&
-        event->x_root < root_x + x + gtk_widget_get_allocated_width(bar) &&
-        event->y_root >= root_y + y &&
-        event->y_root < root_y + y + gtk_widget_get_allocated_height(bar);
-}
-
-static gboolean on_font_popup_press(GtkWidget* popup, GdkEventButton* event, gpointer data)
-{
-    GtkWidget* bar = GTK_WIDGET(data);
-    (void)popup;
-    if (event->button == GDK_BUTTON_PRIMARY && event_over_scrollbar(bar, event))
-    {
-        g_object_set_data(G_OBJECT(bar), "font-scroll-drag", GINT_TO_POINTER(TRUE));
-    }
-    return FALSE;
-}
-
-static gboolean on_font_popup_release(GtkWidget* popup, GdkEventButton* event, gpointer data)
-{
-    GtkWidget* bar = GTK_WIDGET(data);
-    (void)popup;
-    if (event->button != GDK_BUTTON_PRIMARY)
-    {
-        return FALSE;
-    }
-    gboolean dragging = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(bar), "font-scroll-drag"));
-    g_object_set_data(G_OBJECT(bar), "font-scroll-drag", NULL);
-    if (dragging || event_over_scrollbar(bar, event))
-    {
-        /* GtkComboBox's popup release handler treats non-row releases as dismissals.
-         * Finish GtkRange's drag first, then stop the release at the popup boundary. */
-        gtk_widget_event(bar, (GdkEvent*)event);
-        return TRUE;
-    }
-    return FALSE;
-}
-
-static gboolean on_font_popup_event(GtkWidget* popup, GdkEvent* event, gpointer data)
-{
-    if (event->type == GDK_BUTTON_PRESS)
-    {
-        return on_font_popup_press(popup, &event->button, data);
-    }
-    if (event->type == GDK_BUTTON_RELEASE)
-    {
-        return on_font_popup_release(popup, &event->button, data);
-    }
-    return FALSE;
-}
-
-static void on_font_popup_hidden(GtkWidget* popup, gpointer data)
-{
-    (void)popup;
-    g_object_set_data(G_OBJECT(data), "font-scroll-drag", NULL);
-}
-
-static void configure_font_list(GtkWidget* combo)
-{
-    AtkObject* popup = gtk_combo_box_get_popup_accessible(GTK_COMBO_BOX(combo));
-    if (GTK_IS_ACCESSIBLE(popup))
-    {
-        GtkWidget* list = gtk_accessible_get_widget(GTK_ACCESSIBLE(popup));
-        if (GTK_IS_TREE_VIEW(list))
-        {
-            GList* columns = gtk_tree_view_get_columns(GTK_TREE_VIEW(list));
-            for (GList* item = columns; item; item = item->next)
-            {
-                gtk_tree_view_column_set_sizing(GTK_TREE_VIEW_COLUMN(item->data), GTK_TREE_VIEW_COLUMN_FIXED);
-                gtk_tree_view_column_set_fixed_width(GTK_TREE_VIEW_COLUMN(item->data), 260);
-            }
-            g_list_free(columns);
-            gtk_tree_view_set_fixed_height_mode(GTK_TREE_VIEW(list), TRUE);
-            gtk_tree_view_set_enable_search(GTK_TREE_VIEW(list), TRUE);
-            gtk_tree_view_set_search_column(GTK_TREE_VIEW(list), 0);
-            GtkWidget* scroll = gtk_widget_get_ancestor(list, GTK_TYPE_SCROLLED_WINDOW);
-            if (scroll)
-            {
-                gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
-                    GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
-                gtk_scrolled_window_set_overlay_scrolling(GTK_SCROLLED_WINDOW(scroll), FALSE);
-                gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scroll), 240);
-                gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), 320);
-                gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scroll), TRUE);
-                GtkWidget* bar = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(scroll));
-                GtkWidget* window = gtk_widget_get_toplevel(list);
-                g_signal_connect(window, "event", G_CALLBACK(on_font_popup_event), bar);
-                g_signal_connect(window, "hide", G_CALLBACK(on_font_popup_hidden), bar);
-            }
-        }
-    }
-}
-
 static void attach_field(GtkGrid* grid, const gchar* title, GtkWidget* field, gint row)
 {
     GtkWidget* label = gtk_label_new_with_mnemonic(title);
@@ -297,7 +193,7 @@ void on_font_selection(GtkWidget* widget, gpointer data)
     GtkWidget* dialog = gtk_dialog_new_with_buttons("字体设置", GTK_WINDOW(app->ui->window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "取消", GTK_RESPONSE_CANCEL, "确定", GTK_RESPONSE_OK, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 560, 440);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 640, 560);
     gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_OK);
     GtkWidget* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
     gtk_container_set_border_width(GTK_CONTAINER(box), 16);
@@ -310,11 +206,15 @@ void on_font_selection(GtkWidget* widget, gpointer data)
     ui.fallback = create_font_combo();
     ui.size = gtk_spin_button_new_with_range(6, 144, 1);
     gtk_spin_button_set_numeric(GTK_SPIN_BUTTON(ui.size), TRUE);
-    attach_field(GTK_GRID(grid), "字体(_F)", ui.family, 0);
+    g_object_ref_sink(ui.family);
+    g_object_ref_sink(ui.fallback);
+    GtkWidget* family_picker = create_searchable_font_picker(ui.family);
+    GtkWidget* fallback_picker = create_searchable_font_picker(ui.fallback);
+    attach_field(GTK_GRID(grid), "字体(_F)", family_picker, 0);
     attach_field(GTK_GRID(grid), "字形(_S)", ui.face, 1);
     attach_field(GTK_GRID(grid), "字号（磅）(_Z)", ui.size, 2);
     gtk_box_pack_start(GTK_BOX(box), grid, FALSE, FALSE, 0);
-    attach_field(GTK_GRID(grid), "备用字体(_B)", ui.fallback, 3);
+    attach_field(GTK_GRID(grid), "备用字体(_B)", fallback_picker, 3);
     gtk_widget_set_tooltip_text(ui.fallback, "仅在主字体缺少字符时使用，字号与主字体相同");
     GtkWidget* fallback_hint = gtk_label_new("备用字体仅在主字体缺少字符时使用。");
     gtk_widget_set_halign(fallback_hint, GTK_ALIGN_START);
@@ -376,13 +276,12 @@ void on_font_selection(GtkWidget* widget, gpointer data)
     g_object_set_data(G_OBJECT(dialog), "font-size", ui.size);
     g_object_set_data(G_OBJECT(dialog), "font-family", ui.family);
     g_object_set_data(G_OBJECT(dialog), "font-face", ui.face);
-    g_object_set_data(G_OBJECT(dialog), "font-fallback", ui.fallback);
+    g_object_set_data(G_OBJECT(dialog), "font-fallback", fallback_picker);
+    g_object_set_data(G_OBJECT(dialog), "font-family-picker", family_picker);
     render_preview(&ui);
     trace_font_time("before-show", started);
     gtk_widget_show_all(dialog);
-    configure_font_list(ui.family);
-    configure_font_list(ui.face);
-    configure_font_list(ui.fallback);
+
     trace_font_time("show", started);
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK)
     {
@@ -406,6 +305,8 @@ void on_font_selection(GtkWidget* widget, gpointer data)
     gtk_widget_destroy(dialog);
     pango_font_description_free(current);
     pango_font_description_free(fallback);
+    g_object_unref(ui.family);
+    g_object_unref(ui.fallback);
     g_ptr_array_unref(ui.faces);
     g_ptr_array_unref(ui.families);
 }

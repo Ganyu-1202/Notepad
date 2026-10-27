@@ -129,6 +129,7 @@ void setup_main_window(NotepadApp* app)
     gtk_box_pack_start(GTK_BOX(vbox), app->ui->status_bar, FALSE, FALSE, 0);
 
     // 连接信号
+    g_signal_connect(app->ui->text_view, "key-press-event", G_CALLBACK(on_editor_tab_key), app);
     g_signal_connect(app->ui->buffer, "changed", G_CALLBACK(on_text_changed), app);
     g_signal_connect(app->ui->buffer, "notify::cursor-position", G_CALLBACK(on_cursor_moved), app);
     g_signal_connect(app->ui->buffer, "insert-text", G_CALLBACK(on_text_insert), app);
@@ -173,6 +174,8 @@ GtkWidget* create_menu_bar(NotepadApp* app, GtkAccelGroup* accel_group)
     GtkWidget* goto_item = gtk_menu_item_new_with_label("转到行");
     GtkWidget* separator3 = gtk_separator_menu_item_new();
     GtkWidget* select_all_item = gtk_menu_item_new_with_label("全选");
+    GtkWidget* tab_settings_item = gtk_menu_item_new_with_label("制表符设置");
+    g_signal_connect(tab_settings_item, "activate", G_CALLBACK(on_tab_settings), app);
 
     // 视图菜单
     GtkWidget* view_item = gtk_menu_item_new_with_mnemonic("视图(_V)");
@@ -260,6 +263,8 @@ GtkWidget* create_menu_bar(NotepadApp* app, GtkAccelGroup* accel_group)
     gtk_menu_shell_append(GTK_MENU_SHELL(edit_menu), goto_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(edit_menu), separator3);
     gtk_menu_shell_append(GTK_MENU_SHELL(edit_menu), select_all_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(edit_menu), gtk_separator_menu_item_new());
+    gtk_menu_shell_append(GTK_MENU_SHELL(edit_menu), tab_settings_item);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), word_wrap_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), numbers_item);
@@ -403,6 +408,8 @@ void on_revoke(GtkWidget* widget, gpointer data)
         gtk_text_buffer_delete(app->ui->buffer, &iter, &end_iter);
     }
 
+    // 栈内保存下一次需要执行的操作。
+    action->type = action->type == UNDO_INSERT ? UNDO_DELETE : UNDO_INSERT;
     // 移动到重做栈
     action->next = app->ui->redo_stack;
     app->ui->redo_stack = action;
@@ -437,6 +444,7 @@ void on_redo(GtkWidget* widget, gpointer data)
         gtk_text_buffer_delete(app->ui->buffer, &iter, &end_iter);
     }
 
+    action->type = action->type == UNDO_INSERT ? UNDO_DELETE : UNDO_INSERT;
     // 移动到撤销栈
     action->next = app->ui->undo_stack;
     app->ui->undo_stack = action;
