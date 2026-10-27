@@ -1,4 +1,4 @@
-#include "file_operations.h"
+#include "core/file_operations.h"
 #include <string.h>
 
 static const char* encoding_charset(TextEncoding encoding)

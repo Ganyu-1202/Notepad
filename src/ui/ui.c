@@ -2,9 +2,9 @@
 // Created by ganyu on 2025/8/16.
 //
 
-#include "ui.h"
-#include "file_operations.h"
-#include "output_exception.h"
+#include "ui/ui.h"
+#include "core/file_operations.h"
+#include "common/output_exception.h"
 #include <stdlib.h>
 #include <string.h>
 

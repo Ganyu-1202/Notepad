@@ -2,7 +2,7 @@
 // Created by ganyu on 2025/8/16.
 //
 
-#include "output_exception.h"
+#include "common/output_exception.h"
 #include <string.h>
 
 static void on_copy_message(GtkButton* button, gpointer user_data)

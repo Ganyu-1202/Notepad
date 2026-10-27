@@ -5,7 +5,7 @@
 #ifndef FILE_OPERATIONS_H
 #define FILE_OPERATIONS_H
 
-#include "notepad.h"
+#include "core/notepad.h"
 
 extern gboolean load_document(NotepadApp* app, const gchar* filename, GError** error);
 extern gboolean save_document(NotepadApp* app, const gchar* filename, GError** error);

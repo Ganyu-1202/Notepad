@@ -1,6 +1,35 @@
 # Notepad
 A simple and practical text editor, which supports functions such as finding replacements and font settings.
 
+## 项目结构
+
+```text
+Notepad/
+├── CMakeLists.txt
+├── src/
+│   ├── main.c                     # 程序入口
+│   ├── core/                      # 应用状态、生命周期、文件与编码逻辑
+│   │   ├── notepad.c / notepad.h
+│   │   ├── file_operations.c / file_operations.h
+│   │   └── document_encoding.c
+│   ├── ui/                        # GTK 窗口、菜单、编辑器交互与设置界面
+│   │   ├── ui.c / ui.h
+│   │   ├── editor_decorations.c
+│   │   ├── font_dialog.c
+│   │   ├── font_picker.c / font_picker.h
+│   │   └── tab_settings.c
+│   ├── theme/                     # 深浅色、背景样式与图片绘制
+│   │   └── appearance.c
+│   └── common/                    # 通用消息与异常提示辅助
+│       └── output_exception.c / output_exception.h
+├── tests/                         # GTK 回归测试
+│   └── appearance_test.c
+├── notepad.png                    # 应用图标（保持原有位置）
+└── README.md
+```
+
+这是按职责进行的目录归类，不是完全的前后端架构拆分：`core` 中现有文件操作仍包含 GTK 文件对话框及文本缓冲区调用，`common` 消息提示也依赖 GTK。本次不改变这些功能边界。头文件统一使用相对于 `src` 的路径（如 `core/notepad.h`、`ui/ui.h`），构建配置为主程序和测试共用一份模块源文件列表。现有构建目录无需移动，重新运行 CMake 即可更新路径。
+
 ## 外观设置
 
 - **视图 → 字体**：在同一界面选择字体、字形、字号（磅）和备用字体，下方实时预览。无需再次打开嵌套字体选择窗口；字号可独立修改。备用字体选项直接可见，仅在主字体缺字时使用，字号随主字体同步。确定后应用，取消保留原设置。

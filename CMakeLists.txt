@@ -9,30 +9,44 @@ include_directories(${GTK3_INCLUDE_DIRS})
 link_directories(${GTK3_LIBRARY_DIRS})
 add_definitions(${GTK3_CFLAGS_OTHER})
 
-add_executable(Notepad
-        main.c
-        notepad.h
-        file_operations.h
-        ui.h
-        notepad.c
-        ui.c
-        appearance.c
-        editor_decorations.c
-        document_encoding.c
-        font_dialog.c
-        font_picker.c
-        tab_settings.c
-        file_operations.c
-        output_exception.h
-        output_exception.c)
+# Application lifecycle, file operations and encoding.
+set(NOTEPAD_CORE_SOURCES
+        src/core/notepad.c
+        src/core/notepad.h
+        src/core/file_operations.c
+        src/core/file_operations.h
+        src/core/document_encoding.c)
+
+# GTK widgets, menus and editor interaction.
+set(NOTEPAD_UI_SOURCES
+        src/ui/ui.c
+        src/ui/ui.h
+        src/ui/editor_decorations.c
+        src/ui/font_dialog.c
+        src/ui/font_picker.c
+        src/ui/font_picker.h
+        src/ui/tab_settings.c)
+
+# Theme/background rendering and shared helpers.
+set(NOTEPAD_THEME_SOURCES src/theme/appearance.c)
+set(NOTEPAD_COMMON_SOURCES
+        src/common/output_exception.c
+        src/common/output_exception.h)
+
+set(NOTEPAD_SOURCES
+        ${NOTEPAD_CORE_SOURCES}
+        ${NOTEPAD_UI_SOURCES}
+        ${NOTEPAD_THEME_SOURCES}
+        ${NOTEPAD_COMMON_SOURCES})
+
+add_executable(Notepad src/main.c ${NOTEPAD_SOURCES})
+target_include_directories(Notepad PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(Notepad ${GTK3_LIBRARIES})
 
 include(CTest)
 if (BUILD_TESTING)
-        add_executable(NotepadAppearanceTest
-                tests/appearance_test.c
-                notepad.c ui.c appearance.c editor_decorations.c document_encoding.c font_dialog.c font_picker.c tab_settings.c file_operations.c output_exception.c)
-        target_include_directories(NotepadAppearanceTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+        add_executable(NotepadAppearanceTest tests/appearance_test.c ${NOTEPAD_SOURCES})
+        target_include_directories(NotepadAppearanceTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
         target_link_libraries(NotepadAppearanceTest ${GTK3_LIBRARIES})
         add_test(NAME appearance COMMAND NotepadAppearanceTest)
         set_tests_properties(appearance PROPERTIES
@@ -43,5 +57,4 @@ endif()
 # Windows下生成GUI程序不弹出终端
 if (WIN32)
         set_target_properties(Notepad PROPERTIES WIN32_EXECUTABLE TRUE)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++")
 endif()

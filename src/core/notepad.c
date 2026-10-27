@@ -2,12 +2,12 @@
 // Created by ganyu on 2025/8/16.
 //
 
-#include "notepad.h"
-#include "ui.h"
+#include "core/notepad.h"
+#include "ui/ui.h"
 #include <stdlib.h>
 #include <string.h>
-#include "file_operations.h"
-#include "output_exception.h"
+#include "core/file_operations.h"
+#include "common/output_exception.h"
 
 // 构造函数
 NotepadApp* notepad_app_new(void)

@@ -1,4 +1,4 @@
-#include "notepad.h"
+#include "core/notepad.h"
 
 /* A selection ending at the next line's start does not include that line.
  * With no selection, frame the caret's logical line. */

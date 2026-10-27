@@ -7,7 +7,7 @@
 
 
 #include <stdbool.h>
-#include "ui.h"
+#include "ui/ui.h"
 
 typedef enum
 {

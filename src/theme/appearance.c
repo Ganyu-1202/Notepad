@@ -1,5 +1,5 @@
-#include "notepad.h"
-#include "output_exception.h"
+#include "core/notepad.h"
+#include "common/output_exception.h"
 
 void apply_appearance(NotepadApp* app)
 {

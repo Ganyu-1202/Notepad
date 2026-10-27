@@ -1,4 +1,4 @@
-#include "notepad.h"
+#include "core/notepad.h"
 
 static void on_spaces_mode_toggled(GtkToggleButton* button, gpointer data)
 {

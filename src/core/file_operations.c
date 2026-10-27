@@ -2,8 +2,8 @@
 // Created by ganyu on 2025/8/16.
 //
 
-#include "file_operations.h"
-#include "output_exception.h"
+#include "core/file_operations.h"
+#include "common/output_exception.h"
 
 void on_new_file(GtkWidget* widget, gpointer data)
 {

@@ -1,5 +1,5 @@
-#include "notepad.h"
-#include "font_picker.h"
+#include "core/notepad.h"
+#include "ui/font_picker.h"
 #include <string.h>
 
 typedef struct
