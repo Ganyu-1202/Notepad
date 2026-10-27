@@ -51,6 +51,12 @@ typedef struct NotepadUI
     GtkWidget* line_numbers;
     bool show_line_numbers;
     bool frame_selected_lines;
+    int zoom_percent;
+    bool zoom_syncing;
+    int base_dpi;
+    gchar* base_ui_font;
+    gulong zoom_map_hook;
+    GtkWidget* zoom_items;
     bool tab_inserts_spaces;
     int tab_space_count;
     GtkWidget* background_area;

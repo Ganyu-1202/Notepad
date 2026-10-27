@@ -4,6 +4,7 @@
 
 #include "core/notepad.h"
 #include "ui/ui.h"
+#include "ui/zoom.h"
 #include <stdlib.h>
 #include <string.h>
 #include "core/file_operations.h"
@@ -45,6 +46,7 @@ NotepadApp* notepad_app_new(void)
     app->ui->background_opacity = 1.0;
     gdk_rgba_parse(&app->ui->background_color, "#ffffff");
 
+    initialize_zoom(app);
     return app;
 }
 
@@ -59,6 +61,7 @@ void notepad_app_free(NotepadApp* app)
         }
         if (app->ui)
         {
+            clear_zoom(app);
             clear_appearance(app);
 
             // 释放字体设置

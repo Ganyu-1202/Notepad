@@ -3,6 +3,8 @@
 //
 
 #include "ui/ui.h"
+#include "ui/zoom.h"
+#include "resources/notepad_icon.h"
 #include "core/file_operations.h"
 #include "common/output_exception.h"
 #include <stdlib.h>
@@ -83,8 +85,15 @@ void setup_main_window(NotepadApp* app)
     GtkWidget* menu_bar = create_menu_bar(app, accel_group);
     gtk_box_pack_start(GTK_BOX(vbox), menu_bar, FALSE, FALSE, 0);
 
-    const gchar* icon_path = "../notepad.png";
-    gtk_window_set_icon_from_file(GTK_WINDOW(app->ui->window), icon_path, NULL);
+    GdkPixbufLoader* icon_loader = gdk_pixbuf_loader_new();
+    if (gdk_pixbuf_loader_write(icon_loader, notepad_icon_png, sizeof(notepad_icon_png), NULL) &&
+        gdk_pixbuf_loader_close(icon_loader, NULL))
+    {
+        GdkPixbuf* icon = gdk_pixbuf_loader_get_pixbuf(icon_loader);
+        gtk_window_set_icon(GTK_WINDOW(app->ui->window), icon);
+        gtk_window_set_default_icon(icon);
+    }
+    g_object_unref(icon_loader);
 
     // 创建查找和替换栏，默认不可见
     app->ui->find_replace_bar = create_find_replace_bar(app);
@@ -272,6 +281,7 @@ GtkWidget* create_menu_bar(NotepadApp* app, GtkAccelGroup* accel_group)
     gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), font_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), background_settings_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), theme_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), create_zoom_menu(app));
 
     gtk_menu_shell_append(GTK_MENU_SHELL(help_menu), about_item);
 
@@ -697,7 +707,13 @@ static void set_widget_font(GtkWidget* widget, const PangoFontDescription* prima
     gchar* escaped_family = g_strescape(family ? family : "sans-serif", NULL);
     gchar* escaped_fallback = g_strescape(fallback_family ? fallback_family : "sans-serif", NULL);
     gchar size[G_ASCII_DTOSTR_BUF_SIZE];
-    g_ascii_dtostr(size, sizeof(size), (gdouble)pango_font_description_get_size(primary) / PANGO_SCALE);
+    gint base_dpi = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(gtk_settings_get_default()), "notepad-base-dpi"));
+    gdouble pixels = (gdouble)pango_font_description_get_size(primary) / PANGO_SCALE;
+    if (!pango_font_description_get_size_is_absolute(primary))
+    {
+        pixels *= (base_dpi > 0 ? base_dpi / 1024.0 : 96.0) / 72.0;
+    }
+    g_ascii_dtostr(size, sizeof(size), pixels);
     PangoStyle style = pango_font_description_get_style(primary);
     const gchar* stretches[] =
     {
@@ -708,7 +724,7 @@ static void set_widget_font(GtkWidget* widget, const PangoFontDescription* prima
         "textview { font-family: \"%s\", \"%s\", sans-serif; font-size: %s%s; "
         "font-weight: %d; font-style: %s; font-stretch: %s; }",
         escaped_family, escaped_fallback, size,
-        pango_font_description_get_size_is_absolute(primary) ? "px" : "pt",
+        "px",
         CLAMP(((pango_font_description_get_weight(primary) + 50) / 100) * 100, 100, 900),
         style == PANGO_STYLE_ITALIC ? "italic" : style == PANGO_STYLE_OBLIQUE ? "oblique" : "normal",
         stretches[CLAMP(pango_font_description_get_stretch(primary), 0, 8)]);

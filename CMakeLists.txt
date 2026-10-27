@@ -25,7 +25,9 @@ set(NOTEPAD_UI_SOURCES
         src/ui/font_dialog.c
         src/ui/font_picker.c
         src/ui/font_picker.h
-        src/ui/tab_settings.c)
+        src/ui/tab_settings.c
+        src/ui/zoom.c
+        src/ui/zoom.h)
 
 # Theme/background rendering and shared helpers.
 set(NOTEPAD_THEME_SOURCES src/theme/appearance.c)
@@ -56,5 +58,8 @@ endif()
 
 # Windows下生成GUI程序不弹出终端
 if (WIN32)
+        enable_language(RC)
+        target_sources(Notepad PRIVATE src/resources/notepad.rc)
+        target_include_directories(Notepad PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/resources)
         set_target_properties(Notepad PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
