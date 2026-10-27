@@ -9,12 +9,25 @@
 #include <stdbool.h>
 #include "ui.h"
 
+typedef enum
+{
+    ENCODING_UTF8,
+    ENCODING_UTF8_BOM,
+    ENCODING_UTF16_LE,
+    ENCODING_UTF16_BE,
+    ENCODING_UTF32_LE,
+    ENCODING_UTF32_BE,
+    ENCODING_GB18030
+} TextEncoding;
+
 typedef struct NotepadApp
 {
     NotepadUI* ui;          // UI组件
-    char* filename;         // 使用标准char*
-    bool is_modified;       // 使用标准bool
-    bool is_saved;          // 使用标准bool
+    char* filename;
+    bool is_modified;
+    bool is_saved;
+    TextEncoding encoding;
+    bool encoding_inferred;
 } NotepadApp;
 
 extern NotepadApp* notepad_app_new(void); // 创建 NotepadApp 实例

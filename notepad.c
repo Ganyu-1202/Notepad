@@ -13,10 +13,12 @@
 NotepadApp* notepad_app_new(void)
 {
     NotepadApp* app = (NotepadApp*)malloc(sizeof(NotepadApp));
-    app->ui = (NotepadUI*)malloc(sizeof(NotepadUI));
+    app->ui = (NotepadUI*)calloc(1, sizeof(NotepadUI));
     app->filename = NULL;
-    app->is_modified = false;       // 使用标准bool
-    app->is_saved = true;           // 使用标准bool
+    app->is_modified = false;
+    app->is_saved = true;
+    app->encoding = ENCODING_UTF8;
+    app->encoding_inferred = false;
 
     // 初始化UI属性
     app->ui->window = NULL;
@@ -39,6 +41,8 @@ NotepadApp* notepad_app_new(void)
     // 初始化字体设置 - 设置支持中文的字体
     app->ui->primary_font = g_strdup("Microsoft YaHei 12");
     app->ui->fallback_font = g_strdup("SimSun 12");
+    app->ui->background_opacity = 1.0;
+    gdk_rgba_parse(&app->ui->background_color, "#ffffff");
 
     return app;
 }
@@ -50,10 +54,12 @@ void notepad_app_free(NotepadApp* app)
     {
         if (app->filename)
         {
-            free(app->filename);    // 使用标准free而非g_free
+            free(app->filename);
         }
         if (app->ui)
         {
+            clear_appearance(app);
+
             // 释放字体设置
             if (app->ui->primary_font)
             {
@@ -128,19 +134,14 @@ bool notepad_check_save_changes(NotepadApp* app)
             // 用户选择保存
             if (app->filename)
             {
-                GtkTextIter start, end;
-                gtk_text_buffer_get_bounds(app->ui->buffer, &start, &end);
-                gchar* text = gtk_text_buffer_get_text(app->ui->buffer, &start, &end, FALSE);
-                gboolean saved = g_file_set_contents(app->filename, text, -1, NULL);
-                g_free(text);
-
-                if (saved)
+                GError* error = NULL;
+                if (save_document(app, app->filename, &error))
                 {
-                    notepad_set_modified(app, false);  // 使用标准bool
-                    return true; // 保存成功
+                    return true;
                 }
-                gtk_widget_show_all(app->ui->window); // 显示错误信息
-                return false; // 保存失败
+                show_error_dialog(GTK_WINDOW(app->ui->window), "保存失败", error->message);
+                g_clear_error(&error);
+                return false;
             }
             else
             {
@@ -206,36 +207,14 @@ void update_encoding_type(NotepadApp* app)
     if (!app->ui->encoding_label)
         return;
 
-    // 检测当前文件的字符编码
-    const gchar* encoding = "UTF-8";  // 默认编码
-
-    if (app->filename)
+    const char* names[] =
     {
-        // 简单的编码检测，实际项目中可能需要更复杂的检测逻辑
-        gchar* content;
-        gsize length;
-        if (g_file_get_contents(app->filename, &content, &length, NULL))
-        {
-            // 检查UTF-8 BOM
-            if (length >= 3 &&
-                (guchar)content[0] == 0xEF &&
-                (guchar)content[1] == 0xBB &&
-                (guchar)content[2] == 0xBF)
-            {
-                encoding = "UTF-8 BOM";
-            }
-            else if (g_utf8_validate(content, (gssize)length, NULL))
-            {
-                encoding = "UTF-8";
-            }
-            else
-            {
-                // 简单判断，可能是其他编码
-                encoding = "ANSI";
-            }
-            g_free(content);
-        }
-    }
-
-    gtk_label_set_text(GTK_LABEL(app->ui->encoding_label), encoding);
+        "UTF-8", "UTF-8 BOM", "UTF-16 LE BOM", "UTF-16 BE BOM",
+        "UTF-32 LE BOM", "UTF-32 BE BOM", "GB18030"
+    };
+    gtk_label_set_text(GTK_LABEL(app->ui->encoding_label), app->encoding_inferred ?
+        "GB18030（推测）" : names[app->encoding]);
+    gtk_widget_set_tooltip_text(app->ui->encoding_label, app->encoding_inferred ?
+        "无 BOM 且不是有效 UTF-8，按 GB18030 解码；无标记编码无法完全可靠地自动识别" :
+        "当前文档的读写编码；保存时保留此编码及 BOM");
 }

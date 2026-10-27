@@ -7,6 +7,9 @@
 
 #include "notepad.h"
 
+extern gboolean load_document(NotepadApp* app, const gchar* filename, GError** error);
+extern gboolean save_document(NotepadApp* app, const gchar* filename, GError** error);
+
 extern void on_new_file(GtkWidget* widget, gpointer data); // 创建新文件
 extern void on_open_file(GtkWidget* widget, gpointer data); // 打开文件
 extern void on_save_file(GtkWidget* widget, gpointer data); // 保存文件

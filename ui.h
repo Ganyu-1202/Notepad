@@ -2,6 +2,7 @@
 #define UI_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <gtk/gtk.h>
 
 // 前向声明
@@ -14,12 +15,12 @@ typedef enum
     UNDO_DELETE
 } UndoType;
 
-// 撤销操作结构（内部逻辑使用标准类型）
+// 撤销操作结构
 typedef struct UndoAction
 {
     UndoType type;
-    int32_t position;       // 使用标准int32_t
-    char* text;             // 使用标准char*
+    int32_t position;
+    char* text;
     struct UndoAction* next;
 } UndoAction;
 
@@ -46,6 +47,18 @@ typedef struct NotepadUI
     // 字体设置
     gchar* primary_font;    // 首要字体
     gchar* fallback_font;   // 备选字体
+
+    GtkWidget* line_numbers;
+    bool show_line_numbers;
+    bool frame_selected_lines;
+    GtkWidget* background_area;
+    GtkCssProvider* appearance_provider;
+    bool dark_mode;
+    bool custom_background;
+    GdkRGBA background_color;
+    GdkPixbuf* background_image;
+    gchar* background_image_path;
+    gdouble background_opacity;
 } NotepadUI;
 
 extern void setup_main_window(NotepadApp* app);
@@ -104,15 +117,25 @@ extern void apply_font_with_fallback(NotepadApp* app, const gchar* primary_font,
 
 extern void on_font_preview_update(GtkWidget* font_button, gpointer data);
 
-extern void validate_font_application(NotepadApp* app, const gchar* primary_font, const gchar* fallback_font);
 
 // 背景设置相关
 extern void on_background_settings(GtkWidget* widget, gpointer data);
 extern void on_browse_image_file(GtkWidget* widget, gpointer data);
-extern void on_color_radio_toggled(GtkWidget* widget, gpointer data);
-extern void on_image_radio_toggled(GtkWidget* widget, gpointer data);
 extern void apply_background_color(NotepadApp* app, const GdkRGBA* color);
 extern void apply_background_image(NotepadApp* app, const gchar* image_path, gdouble opacity);
+
+// 外观管理
+extern void apply_appearance(NotepadApp* app);
+extern void on_theme_toggled(GtkCheckMenuItem* item, gpointer data);
+extern void reset_background(NotepadApp* app);
+extern gboolean draw_editor_background(GtkWidget* widget, cairo_t* cr, gpointer data);
+extern void clear_appearance(NotepadApp* app);
+
+extern void setup_editor_decorations(NotepadApp* app);
+extern void refresh_editor_decorations(NotepadApp* app);
+extern void on_line_numbers_toggled(GtkCheckMenuItem* item, gpointer data);
+extern void on_line_frame_toggled(GtkCheckMenuItem* item, gpointer data);
+extern gboolean get_framed_line_range(NotepadApp* app, int* first, int* last);
 
 // 关于对话框
 extern void on_about(GtkWidget* widget, gpointer data);

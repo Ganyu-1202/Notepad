@@ -96,9 +96,21 @@ void setup_main_window(NotepadApp* app)
     GtkWidget* scrolled_window = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
                                    GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-    gtk_box_pack_start(GTK_BOX(vbox), scrolled_window, TRUE, TRUE, 0);
+    GtkWidget* overlay = gtk_overlay_new();
+    app->ui->background_area = gtk_drawing_area_new();
+    gtk_widget_set_name(app->ui->background_area, "notepad-background");
+    gtk_container_add(GTK_CONTAINER(overlay), app->ui->background_area);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), scrolled_window);
+    GtkWidget* editor_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    app->ui->line_numbers = gtk_drawing_area_new();
+    gtk_widget_set_no_show_all(app->ui->line_numbers, TRUE);
+    gtk_box_pack_start(GTK_BOX(editor_box), app->ui->line_numbers, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(editor_box), overlay, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), editor_box, TRUE, TRUE, 0);
+    g_signal_connect(app->ui->background_area, "draw", G_CALLBACK(draw_editor_background), app);
 
     app->ui->text_view = gtk_text_view_new();
+    gtk_widget_set_name(app->ui->text_view, "notepad-editor");
     app->ui->buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(app->ui->text_view));
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(app->ui->text_view), GTK_WRAP_WORD);
 
@@ -109,6 +121,8 @@ void setup_main_window(NotepadApp* app)
     gtk_text_view_set_bottom_margin(GTK_TEXT_VIEW(app->ui->text_view), 10);
 
     gtk_container_add(GTK_CONTAINER(scrolled_window), app->ui->text_view);
+
+    setup_editor_decorations(app);
 
     // 创建状态栏
     app->ui->status_bar = create_status_bar(app);
@@ -121,6 +135,9 @@ void setup_main_window(NotepadApp* app)
     g_signal_connect(app->ui->buffer, "delete-range", G_CALLBACK(on_text_delete), app);
     g_signal_connect(app->ui->window, "delete-event", G_CALLBACK(on_window_delete), app);
     g_signal_connect(app->ui->window, "destroy", G_CALLBACK(on_quit), NULL);
+
+    apply_font_with_fallback(app, app->ui->primary_font, app->ui->fallback_font);
+    apply_appearance(app);
 
     // 初始化状态栏信息
     update_cursor_position(app);
@@ -164,7 +181,24 @@ GtkWidget* create_menu_bar(NotepadApp* app, GtkAccelGroup* accel_group)
 
     GtkWidget* word_wrap_item = gtk_check_menu_item_new_with_label("自动换行");
     GtkWidget* font_item = gtk_menu_item_new_with_label("字体");
+    GtkWidget* numbers_item = gtk_check_menu_item_new_with_label("显示行号");
+    GtkWidget* frame_item = gtk_check_menu_item_new_with_label("框选中行");
+    gtk_widget_set_tooltip_text(frame_item, "框出选区覆盖的逻辑行；无选区时框出光标所在行");
+    g_signal_connect(numbers_item, "toggled", G_CALLBACK(on_line_numbers_toggled), app);
+    g_signal_connect(frame_item, "toggled", G_CALLBACK(on_line_frame_toggled), app);
     GtkWidget* background_settings_item = gtk_menu_item_new_with_label("背景设置");
+    GtkWidget* theme_item = gtk_menu_item_new_with_label("外观模式");
+    GtkWidget* theme_menu = gtk_menu_new();
+    GtkWidget* light_item = gtk_radio_menu_item_new_with_label(NULL, "浅色");
+    GtkWidget* dark_item = gtk_radio_menu_item_new_with_label_from_widget(
+        GTK_RADIO_MENU_ITEM(light_item), "深色");
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(theme_item), theme_menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(theme_menu), light_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(theme_menu), dark_item);
+    g_object_set_data(G_OBJECT(dark_item), "dark-mode", GINT_TO_POINTER(TRUE));
+    g_signal_connect(light_item, "toggled", G_CALLBACK(on_theme_toggled), app);
+    g_signal_connect(dark_item, "toggled", G_CALLBACK(on_theme_toggled), app);
+
 
     // 帮助菜单
     GtkWidget* help_item = gtk_menu_item_new_with_mnemonic("帮助(_H)");
@@ -228,8 +262,11 @@ GtkWidget* create_menu_bar(NotepadApp* app, GtkAccelGroup* accel_group)
     gtk_menu_shell_append(GTK_MENU_SHELL(edit_menu), select_all_item);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), word_wrap_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), numbers_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), frame_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), font_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), background_settings_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(view_menu), theme_item);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(help_menu), about_item);
 
@@ -635,6 +672,17 @@ void on_close_find_replace(GtkWidget* widget, gpointer data)
     gtk_widget_grab_focus(app->ui->text_view);
 }
 
+static void on_font_size_changed(GtkSpinButton* spin, gpointer data)
+{
+    GtkWidget* button = GTK_WIDGET(data);
+    PangoFontDescription* desc = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(button));
+    pango_font_description_set_size(desc, gtk_spin_button_get_value_as_int(spin) * PANGO_SCALE);
+    gtk_font_chooser_set_font_desc(GTK_FONT_CHOOSER(button), desc);
+    pango_font_description_free(desc);
+    GtkWidget* preview = g_object_get_data(G_OBJECT(spin), "preview");
+    on_font_preview_update(button, preview);
+}
+
 void on_font_selection(GtkWidget* widget, gpointer data)
 {
     NotepadApp* app = (NotepadApp*)data;
@@ -663,7 +711,7 @@ void on_font_selection(GtkWidget* widget, gpointer data)
 
     GtkWidget* primary_font_button = gtk_font_button_new();
     gtk_font_chooser_set_level(GTK_FONT_CHOOSER(primary_font_button),
-                               GTK_FONT_CHOOSER_LEVEL_FAMILY | GTK_FONT_CHOOSER_LEVEL_SIZE);
+                               GTK_FONT_CHOOSER_LEVEL_FAMILY | GTK_FONT_CHOOSER_LEVEL_STYLE | GTK_FONT_CHOOSER_LEVEL_SIZE);
 
     // 设置当前首要字体
     if (app->ui->primary_font)
@@ -686,7 +734,7 @@ void on_font_selection(GtkWidget* widget, gpointer data)
 
     GtkWidget* fallback_font_button = gtk_font_button_new();
     gtk_font_chooser_set_level(GTK_FONT_CHOOSER(fallback_font_button),
-                               GTK_FONT_CHOOSER_LEVEL_FAMILY | GTK_FONT_CHOOSER_LEVEL_SIZE);
+                               GTK_FONT_CHOOSER_LEVEL_FAMILY | GTK_FONT_CHOOSER_LEVEL_STYLE | GTK_FONT_CHOOSER_LEVEL_SIZE);
 
     // 设置当前备选字体
     if (app->ui->fallback_font)
@@ -702,6 +750,16 @@ void on_font_selection(GtkWidget* widget, gpointer data)
         gtk_font_chooser_set_font_desc(GTK_FONT_CHOOSER(fallback_font_button), default_font);
         pango_font_description_free(default_font);
     }
+
+    GtkWidget* size_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget* size_spin = gtk_spin_button_new_with_range(6, 144, 1);
+    PangoFontDescription* current_desc = pango_font_description_from_string(app->ui->primary_font);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(size_spin),
+        (gdouble)pango_font_description_get_size(current_desc) / PANGO_SCALE);
+    pango_font_description_free(current_desc);
+    gtk_box_pack_start(GTK_BOX(size_box), gtk_label_new("字号（磅）:"), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(size_box), size_spin, FALSE, FALSE, 0);
+    g_object_set_data(G_OBJECT(dialog), "font-size", size_spin);
 
     // 预览文本
     GtkWidget* preview_label = gtk_label_new("预览:");
@@ -723,12 +781,16 @@ void on_font_selection(GtkWidget* widget, gpointer data)
     // 添加到容器
     gtk_box_pack_start(GTK_BOX(main_box), primary_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), primary_font_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), size_box, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), fallback_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), fallback_font_button, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), preview_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), preview_scrolled, TRUE, TRUE, 0);
 
     gtk_container_add(GTK_CONTAINER(content_area), main_box);
+
+    g_object_set_data(G_OBJECT(size_spin), "preview", preview_text);
+    g_signal_connect(size_spin, "value-changed", G_CALLBACK(on_font_size_changed), primary_font_button);
 
     // 字体变化时更新预览
     g_signal_connect(primary_font_button, "font-set",
@@ -813,132 +875,68 @@ void on_font_preview_update(GtkWidget* font_button, gpointer data)
 
     if (primary_font_button && fallback_font_button)
     {
+        GtkWidget* spin = g_object_get_data(G_OBJECT(dialog), "font-size");
+        if (font_button == primary_font_button && spin)
+        {
+            PangoFontDescription* desc = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(primary_font_button));
+            g_signal_handlers_block_by_func(spin, on_font_size_changed, primary_font_button);
+            gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin),
+                (gdouble)pango_font_description_get_size(desc) / PANGO_SCALE);
+            g_signal_handlers_unblock_by_func(spin, on_font_size_changed, primary_font_button);
+            pango_font_description_free(desc);
+        }
         update_font_preview(preview_text, primary_font_button, fallback_font_button);
     }
 }
 
-// 更新预览
+/* Each widget owns exactly one font provider. Reloading it also handles size-only edits. */
+static void set_widget_font(GtkWidget* widget, const PangoFontDescription* primary,
+                            const PangoFontDescription* fallback)
+{
+    GtkCssProvider* provider = g_object_get_data(G_OBJECT(widget), "notepad-font-provider");
+    if (!provider)
+    {
+        provider = gtk_css_provider_new();
+        gtk_style_context_add_provider(gtk_widget_get_style_context(widget),
+            GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+        g_object_set_data_full(G_OBJECT(widget), "notepad-font-provider", provider, g_object_unref);
+    }
+    const gchar* family = pango_font_description_get_family(primary);
+    const gchar* fallback_family = pango_font_description_get_family(fallback);
+    gchar* escaped_family = g_strescape(family ? family : "sans-serif", NULL);
+    gchar* escaped_fallback = g_strescape(fallback_family ? fallback_family : "sans-serif", NULL);
+    gchar size[G_ASCII_DTOSTR_BUF_SIZE];
+    g_ascii_dtostr(size, sizeof(size), (gdouble)pango_font_description_get_size(primary) / PANGO_SCALE);
+    PangoStyle style = pango_font_description_get_style(primary);
+    gchar* css = g_strdup_printf(
+        "textview { font-family: \"%s\", \"%s\", sans-serif; font-size: %s%s; "
+        "font-weight: %d; font-style: %s; }",
+        escaped_family, escaped_fallback, size,
+        pango_font_description_get_size_is_absolute(primary) ? "px" : "pt",
+        pango_font_description_get_weight(primary),
+        style == PANGO_STYLE_ITALIC ? "italic" : style == PANGO_STYLE_OBLIQUE ? "oblique" : "normal");
+    gtk_css_provider_load_from_data(provider, css, -1, NULL);
+    g_free(css);
+    g_free(escaped_family);
+    g_free(escaped_fallback);
+}
+
 void update_font_preview(GtkWidget* preview_text, GtkWidget* primary_button, GtkWidget* fallback_button)
 {
-    PangoFontDescription* primary_desc = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(primary_button));
-    PangoFontDescription* fallback_desc = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(fallback_button));
-
-    // 创建字体列表字符串
-    gchar* primary_font = pango_font_description_to_string(primary_desc);
-    gchar* fallback_font = pango_font_description_to_string(fallback_desc);
-
-    // 创建CSS样式提供者
-    GtkCssProvider* css_provider = gtk_css_provider_new();
-    gchar* css_data = g_strdup_printf(
-        "textview { font-family: \"%s\", \"%s\"; font-size: %dpx; }",
-        pango_font_description_get_family(primary_desc),
-        pango_font_description_get_family(fallback_desc),
-        pango_font_description_get_size(primary_desc) / PANGO_SCALE
-    );
-
-    gtk_css_provider_load_from_data(css_provider, css_data, -1, NULL);
-
-    GtkStyleContext* style_context = gtk_widget_get_style_context(preview_text);
-    gtk_style_context_add_provider(style_context,
-                                   GTK_STYLE_PROVIDER(css_provider),
-                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-
-    g_free(primary_font);
-    g_free(fallback_font);
-    g_free(css_data);
-    pango_font_description_free(primary_desc);
-    pango_font_description_free(fallback_desc);
-    g_object_unref(css_provider);
+    PangoFontDescription* primary = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(primary_button));
+    PangoFontDescription* fallback = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(fallback_button));
+    set_widget_font(preview_text, primary, fallback);
+    pango_font_description_free(primary);
+    pango_font_description_free(fallback);
 }
 
-// 应用字体并设置备选
 void apply_font_with_fallback(NotepadApp* app, const gchar* primary_font, const gchar* fallback_font)
 {
-    // 解析首要字体
-    PangoFontDescription* primary_desc = pango_font_description_from_string(primary_font);
-    PangoFontDescription* fallback_desc = pango_font_description_from_string(fallback_font);
-
-    // 获取字体族名
-    const gchar* primary_family = pango_font_description_get_family(primary_desc);
-    const gchar* fallback_family = pango_font_description_get_family(fallback_desc);
-
-    // 创建CSS样式提供者，包含中文字体支持
-    GtkCssProvider* css_provider = gtk_css_provider_new();
-    gchar* css_data = g_strdup_printf(
-        "textview { "
-        "font-family: \"%s\", \"%s\", \"Microsoft YaHei\", \"SimSun\", \"Arial Unicode MS\", sans-serif; "
-        "font-size: %dpx; "
-        "font-weight: %d; "
-        "font-style: %s; "
-        "}",
-        primary_family ? primary_family : "Microsoft YaHei",
-        fallback_family ? fallback_family : "SimSun",
-        pango_font_description_get_size(primary_desc) / PANGO_SCALE,
-        pango_font_description_get_weight(primary_desc),
-        pango_font_description_get_style(primary_desc) == PANGO_STYLE_ITALIC ? "italic" : "normal"
-    );
-
-    gtk_css_provider_load_from_data(css_provider, css_data, -1, NULL);
-
-    // 应用到文本视图
-    GtkStyleContext* style_context = gtk_widget_get_style_context(app->ui->text_view);
-
-    // 移除之前的字体样式提供者
-    gtk_style_context_remove_provider_for_screen(gdk_screen_get_default(),
-                                                 GTK_STYLE_PROVIDER(css_provider));
-
-    gtk_style_context_add_provider(style_context,
-                                   GTK_STYLE_PROVIDER(css_provider),
-                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-
-    // 验证字体应用结果
-    validate_font_application(app, primary_font, fallback_font);
-
-    g_free(css_data);
-    pango_font_description_free(primary_desc);
-    pango_font_description_free(fallback_desc);
-    g_object_unref(css_provider);
-}
-
-// 验证字体应用
-void validate_font_application(NotepadApp* app, const gchar* primary_font, const gchar* fallback_font)
-{
-    PangoFontDescription* primary_desc = pango_font_description_from_string(primary_font);
-    const gchar* primary_family = pango_font_description_get_family(primary_desc);
-
-    // 获取实际应用的字体
-    PangoContext* context = gtk_widget_get_pango_context(app->ui->text_view);
-    PangoFontDescription* current_font = pango_context_get_font_description(context);
-
-    gchar* message;
-    if (current_font)
-    {
-        const gchar* current_family = pango_font_description_get_family(current_font);
-
-        if (current_family && primary_family && strcmp(current_family, primary_family) == 0)
-        {
-            message = g_strdup_printf("已应用首要字体: %s", primary_family);
-        }
-        else
-        {
-            PangoFontDescription* fallback_desc = pango_font_description_from_string(fallback_font);
-            const gchar* fallback_family = pango_font_description_get_family(fallback_desc);
-            message = g_strdup_printf("首要字体不可用，已使用备选字体: %s",
-                                      fallback_family ? fallback_family : "默认字体");
-            pango_font_description_free(fallback_desc);
-            output_exception_message(EXCEPTION_WARNING, message);
-        }
-    }
-    else
-    {
-        message = g_strdup("字体设置已应用");
-    }
-
-    // show_info_dialog(GTK_WINDOW(app->ui->window), "字体设置", message);
-
-
-    g_free(message);
-    pango_font_description_free(primary_desc);
+    PangoFontDescription* primary = pango_font_description_from_string(primary_font);
+    PangoFontDescription* fallback = pango_font_description_from_string(fallback_font);
+    set_widget_font(app->ui->text_view, primary, fallback);
+    pango_font_description_free(primary);
+    pango_font_description_free(fallback);
 }
 
 void on_word_wrap_toggle(GtkWidget* widget, gpointer data)
@@ -955,6 +953,16 @@ void on_word_wrap_toggle(GtkWidget* widget, gpointer data)
     {
         gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(app->ui->text_view), GTK_WRAP_NONE);
     }
+}
+
+static void background_option_toggled(GtkToggleButton* button, gpointer data)
+{
+    gtk_widget_set_sensitive(GTK_WIDGET(data), gtk_toggle_button_get_active(button));
+}
+
+static void background_default_toggled(GtkToggleButton* button, gpointer data)
+{
+    gtk_widget_set_sensitive(GTK_WIDGET(data), !gtk_toggle_button_get_active(button));
 }
 
 void on_background_settings(GtkWidget* widget, gpointer data)
@@ -985,10 +993,13 @@ void on_background_settings(GtkWidget* widget, gpointer data)
     gtk_container_add(GTK_CONTAINER(type_frame), type_box);
 
     // 单选按钮组
-    GtkWidget* color_radio = gtk_radio_button_new_with_label(NULL, "纯色背景");
+    GtkWidget* default_radio = gtk_radio_button_new_with_label(NULL, "跟随主题");
+    GtkWidget* color_radio = gtk_radio_button_new_with_label_from_widget(
+        GTK_RADIO_BUTTON(default_radio), "纯色背景");
     GtkWidget* image_radio = gtk_radio_button_new_with_label_from_widget(
         GTK_RADIO_BUTTON(color_radio), "图片背景");
 
+    gtk_box_pack_start(GTK_BOX(type_box), default_radio, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(type_box), color_radio, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(type_box), image_radio, FALSE, FALSE, 0);
 
@@ -1002,11 +1013,10 @@ void on_background_settings(GtkWidget* widget, gpointer data)
 
     GtkWidget* color_label = gtk_label_new("背景颜色:");
     GtkWidget* color_button = gtk_color_button_new();
-    gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(color_button), TRUE);
+    gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(color_button), FALSE);
 
     // 设置默认颜色为白色
-    GdkRGBA white = {1.0, 1.0, 1.0, 1.0};
-    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_button), &white);
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_button), &app->ui->background_color);
 
     gtk_box_pack_start(GTK_BOX(color_box), color_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(color_box), color_button, FALSE, FALSE, 0);
@@ -1022,6 +1032,7 @@ void on_background_settings(GtkWidget* widget, gpointer data)
     GtkWidget* file_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     GtkWidget* file_label = gtk_label_new("图片文件:");
     GtkWidget* file_entry = gtk_entry_new();
+    gtk_entry_set_text(GTK_ENTRY(file_entry), app->ui->background_image_path ? app->ui->background_image_path : "");
     GtkWidget* browse_button = gtk_button_new_with_label("浏览...");
 
     gtk_box_pack_start(GTK_BOX(file_box), file_label, FALSE, FALSE, 0);
@@ -1037,23 +1048,37 @@ void on_background_settings(GtkWidget* widget, gpointer data)
     gtk_container_set_border_width(GTK_CONTAINER(opacity_box), 10);
     gtk_container_add(GTK_CONTAINER(opacity_frame), opacity_box);
 
-    GtkWidget* opacity_label = gtk_label_new("透明度:");
-    GtkWidget* opacity_scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0.0, 1.0, 0.01);
-    gtk_range_set_value(GTK_RANGE(opacity_scale), 1.0);
-    gtk_scale_set_draw_value(GTK_SCALE(opacity_scale), TRUE);
-    gtk_scale_set_value_pos(GTK_SCALE(opacity_scale), GTK_POS_RIGHT);
-    gtk_scale_set_digits(GTK_SCALE(opacity_scale), 2);
+    GtkWidget* opacity_label = gtk_label_new("背景透明度:");
+    GtkAdjustment* transparency = gtk_adjustment_new(
+        (1.0 - app->ui->background_opacity) * 100.0, 0.0, 100.0, 1.0, 10.0, 0.0);
+    GtkWidget* opacity_scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, transparency);
+    GtkWidget* opacity_spin = gtk_spin_button_new(transparency, 1.0, 0);
+    gtk_spin_button_set_numeric(GTK_SPIN_BUTTON(opacity_spin), TRUE);
+    gtk_spin_button_set_update_policy(GTK_SPIN_BUTTON(opacity_spin), GTK_UPDATE_IF_VALID);
+    gtk_scale_set_draw_value(GTK_SCALE(opacity_scale), FALSE);
+    gtk_widget_set_tooltip_text(opacity_scale, "0% 为完全不透明，100% 为完全透明，显示主题底色");
+    g_object_set_data(G_OBJECT(dialog), "background-transparency", opacity_spin);
+    g_object_set_data(G_OBJECT(dialog), "background-transparency-scale", opacity_scale);
+    g_object_set_data(G_OBJECT(dialog), "background-default", default_radio);
+    g_object_set_data(G_OBJECT(dialog), "background-color", color_radio);
+    g_object_set_data(G_OBJECT(dialog), "background-image", image_radio);
+    g_object_set_data(G_OBJECT(dialog), "background-color-button", color_button);
 
     gtk_box_pack_start(GTK_BOX(opacity_box), opacity_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(opacity_box), opacity_scale, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(opacity_box), opacity_spin, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(opacity_box), gtk_label_new("%"), FALSE, FALSE, 0);
 
     // 连接信号处理函数
     g_signal_connect(browse_button, "clicked", G_CALLBACK(on_browse_image_file), file_entry);
-    g_signal_connect(color_radio, "toggled", G_CALLBACK(on_color_radio_toggled), image_frame);
-
-    // 设置初始状态：纯色背景选中，图片设置区域禁用
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(color_radio), TRUE);
-    gtk_widget_set_sensitive(image_frame, FALSE);
+    g_signal_connect(color_radio, "toggled", G_CALLBACK(background_option_toggled), color_frame);
+    g_signal_connect(image_radio, "toggled", G_CALLBACK(background_option_toggled), image_frame);
+    g_signal_connect(default_radio, "toggled", G_CALLBACK(background_default_toggled), opacity_frame);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(!app->ui->custom_background ? default_radio :
+        app->ui->background_image ? image_radio : color_radio), TRUE);
+    background_option_toggled(GTK_TOGGLE_BUTTON(color_radio), color_frame);
+    background_option_toggled(GTK_TOGGLE_BUTTON(image_radio), image_frame);
+    background_default_toggled(GTK_TOGGLE_BUTTON(default_radio), opacity_frame);
 
     gtk_widget_show_all(dialog);
 
@@ -1064,9 +1089,14 @@ void on_background_settings(GtkWidget* widget, gpointer data)
     {
         // 修复：完善确定按钮逻辑
         gboolean use_image = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(image_radio));
-        gdouble opacity = gtk_range_get_value(GTK_RANGE(opacity_scale));
+        gtk_spin_button_update(GTK_SPIN_BUTTON(opacity_spin));
+        gdouble opacity = 1.0 - gtk_adjustment_get_value(transparency) / 100.0;
 
-        if (use_image)
+        if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(default_radio)))
+        {
+            reset_background(app);
+        }
+        else if (use_image)
         {
             // 应用图片背景
             const gchar* image_path = gtk_entry_get_text(GTK_ENTRY(file_entry));
@@ -1081,182 +1111,31 @@ void on_background_settings(GtkWidget* widget, gpointer data)
         }
         else
         {
-            // 应用纯色背景
             GdkRGBA color;
             gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(color_button), &color);
+            color.alpha = opacity;
             apply_background_color(app, &color);
         }
     }
-
     gtk_widget_destroy(dialog);
 }
 
-void on_color_radio_toggled(GtkWidget* widget, gpointer data)
-{
-    GtkWidget* image_frame = (GtkWidget*)data;
-    gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
-
-    // 纯色选中时，禁用图片设置
-    gtk_widget_set_sensitive(image_frame, !active);
-}
-
-void on_image_radio_toggled(GtkWidget* widget, gpointer data)
-{
-    GtkWidget* color_frame = (GtkWidget*)data;
-    gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
-
-    if (active)
-    {
-        gtk_widget_set_sensitive(color_frame, FALSE);
-    }
-    else
-    {
-        gtk_widget_set_sensitive(color_frame, TRUE);
-    }
-}
-
-// 浏览图片文件
 void on_browse_image_file(GtkWidget* widget, gpointer data)
 {
-    GtkWidget* file_entry = (GtkWidget*)data;
-    GtkWidget* parent = gtk_widget_get_toplevel(widget);
-
-    GtkWidget* file_dialog = gtk_file_chooser_dialog_new("选择背景图片",
-                                                         GTK_WINDOW(parent),
-                                                         GTK_FILE_CHOOSER_ACTION_OPEN,
-                                                         "取消", GTK_RESPONSE_CANCEL,
-                                                         "选择", GTK_RESPONSE_ACCEPT,
-                                                         NULL);
-
-    // 添加图片文件过滤器
+    GtkWidget* dialog = gtk_file_chooser_dialog_new("选择背景图片",
+        GTK_WINDOW(gtk_widget_get_toplevel(widget)), GTK_FILE_CHOOSER_ACTION_OPEN,
+        "取消", GTK_RESPONSE_CANCEL, "选择", GTK_RESPONSE_ACCEPT, NULL);
     GtkFileFilter* filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "图片文件");
-    gtk_file_filter_add_pattern(filter, "*.png");
-    gtk_file_filter_add_pattern(filter, "*.jpg");
-    gtk_file_filter_add_pattern(filter, "*.jpeg");
-    gtk_file_filter_add_pattern(filter, "*.gif");
-    gtk_file_filter_add_pattern(filter, "*.bmp");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
-
-    if (gtk_dialog_run(GTK_DIALOG(file_dialog)) == GTK_RESPONSE_ACCEPT)
+    gtk_file_filter_add_pixbuf_formats(filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
     {
-        gchar* filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(file_dialog));
-        gtk_entry_set_text(GTK_ENTRY(file_entry), filename);
+        gchar* filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        gtk_entry_set_text(GTK_ENTRY(data), filename);
         g_free(filename);
     }
-
-    gtk_widget_destroy(file_dialog);
-}
-
-// 应用纯色背景
-void apply_background_color(NotepadApp* app, const GdkRGBA* color)
-{
-    GtkCssProvider* css_provider = gtk_css_provider_new();
-
-    // 使用正确的CSS语法设置背景色
-    gchar* css_data = g_strdup_printf(
-        "textview text { "
-        "background-color: rgba(%d, %d, %d, %.2f); "
-        "}",
-        (int)(color->red * 255),
-        (int)(color->green * 255),
-        (int)(color->blue * 255),
-        color->alpha
-    );
-
-    GError* error = NULL;
-    if (!gtk_css_provider_load_from_data(css_provider, css_data, -1, &error))
-    {
-        g_warning("CSS 加载失败: %s", error->message);
-        show_error_dialog(GTK_WINDOW(app->ui->window), "错误", "背景颜色设置失败");
-        g_error_free(error);
-        g_free(css_data);
-        g_object_unref(css_provider);
-        return;
-    }
-
-    GtkStyleContext* style_context = gtk_widget_get_style_context(app->ui->text_view);
-
-    // 应用新的样式
-    gtk_style_context_add_provider(style_context,
-                                   GTK_STYLE_PROVIDER(css_provider),
-                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-
-    g_free(css_data);
-    g_object_unref(css_provider);
-}
-
-// 应用图片背景
-void apply_background_image(NotepadApp* app, const gchar* image_path, gdouble opacity)
-{
-    // 检查文件是否存在
-    if (!g_file_test(image_path, G_FILE_TEST_EXISTS))
-    {
-        show_error_dialog(GTK_WINDOW(app->ui->window), "错误", "图片文件不存在");
-        return;
-    }
-
-    GtkCssProvider* css_provider = gtk_css_provider_new();
-
-    // 处理文件路径，确保在Windows上正确处理反斜杠
-    gchar* escaped_path = g_strescape(image_path, NULL);
-
-    // 使用正确的CSS语法设置背景图片
-    gchar* css_data = g_strdup_printf(
-        "textview text { "
-        "background-image: url('file:///%s'); "
-        "background-repeat: no-repeat; "
-        "background-position: center center; "
-        "background-size: cover; "
-        "opacity: %.2f; "
-        "}",
-        escaped_path, opacity
-    );
-
-    GError* error = NULL;
-    if (!gtk_css_provider_load_from_data(css_provider, css_data, -1, &error))
-    {
-        g_warning("CSS 加载失败: %s", error->message);
-
-        // 尝试简化的CSS
-        g_free(css_data);
-        g_error_free(error);
-
-        css_data = g_strdup_printf(
-            "textview { "
-            "background: url('file:///%s') center/cover no-repeat; "
-            "}",
-            escaped_path
-        );
-
-        error = NULL;
-        if (!gtk_css_provider_load_from_data(css_provider, css_data, -1, &error))
-        {
-            g_warning("简化CSS也加载失败: %s", error->message);
-            show_error_dialog(GTK_WINDOW(app->ui->window), "错误", "背景图片设置失败");
-            g_error_free(error);
-            g_free(css_data);
-            g_free(escaped_path);
-            g_object_unref(css_provider);
-            return;
-        }
-    }
-
-    GtkStyleContext* style_context = gtk_widget_get_style_context(app->ui->text_view);
-
-    // 应用新的样式
-    gtk_style_context_add_provider(style_context,
-                                   GTK_STYLE_PROVIDER(css_provider),
-                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-
-    // 显示成功信息
-    gchar* success_msg = g_strdup_printf("背景图片已设置为: %s", image_path);
-    show_info_dialog(GTK_WINDOW(app->ui->window), "设置成功", success_msg);
-
-    g_free(success_msg);
-    g_free(css_data);
-    g_free(escaped_path);
-    g_object_unref(css_provider);
+    gtk_widget_destroy(dialog);
 }
 
 void on_about(GtkWidget* widget, gpointer data)
@@ -1321,6 +1200,8 @@ void on_text_changed(GtkTextBuffer* buffer, gpointer data)
 {
     NotepadApp* app = (NotepadApp*)data;
     notepad_set_modified(app, TRUE);
+    refresh_editor_decorations(app);
+    update_line_ending_type(app);
 }
 
 gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer data)
