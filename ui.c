@@ -672,223 +672,6 @@ void on_close_find_replace(GtkWidget* widget, gpointer data)
     gtk_widget_grab_focus(app->ui->text_view);
 }
 
-static void on_font_size_changed(GtkSpinButton* spin, gpointer data)
-{
-    GtkWidget* button = GTK_WIDGET(data);
-    PangoFontDescription* desc = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(button));
-    pango_font_description_set_size(desc, gtk_spin_button_get_value_as_int(spin) * PANGO_SCALE);
-    gtk_font_chooser_set_font_desc(GTK_FONT_CHOOSER(button), desc);
-    pango_font_description_free(desc);
-    GtkWidget* preview = g_object_get_data(G_OBJECT(spin), "preview");
-    on_font_preview_update(button, preview);
-}
-
-void on_font_selection(GtkWidget* widget, gpointer data)
-{
-    NotepadApp* app = (NotepadApp*)data;
-
-    // 创建字体选择对话框
-    GtkWidget* dialog = gtk_dialog_new_with_buttons("字体设置",
-                                                    GTK_WINDOW(app->ui->window),
-                                                    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                                    "确定", GTK_RESPONSE_OK,
-                                                    "取消", GTK_RESPONSE_CANCEL,
-                                                    NULL);
-
-    GtkWidget* content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_widget_set_size_request(dialog, 450, 350);
-
-    // 创建主容器
-    GtkWidget* main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_widget_set_margin_start(main_box, 15);
-    gtk_widget_set_margin_end(main_box, 15);
-    gtk_widget_set_margin_top(main_box, 15);
-    gtk_widget_set_margin_bottom(main_box, 15);
-
-    // 首要字体选择
-    GtkWidget* primary_label = gtk_label_new("首要字体:");
-    gtk_widget_set_halign(primary_label, GTK_ALIGN_START);
-
-    GtkWidget* primary_font_button = gtk_font_button_new();
-    gtk_font_chooser_set_level(GTK_FONT_CHOOSER(primary_font_button),
-                               GTK_FONT_CHOOSER_LEVEL_FAMILY | GTK_FONT_CHOOSER_LEVEL_STYLE | GTK_FONT_CHOOSER_LEVEL_SIZE);
-
-    // 设置当前首要字体
-    if (app->ui->primary_font)
-    {
-        PangoFontDescription* font_desc = pango_font_description_from_string(app->ui->primary_font);
-        gtk_font_chooser_set_font_desc(GTK_FONT_CHOOSER(primary_font_button), font_desc);
-        pango_font_description_free(font_desc);
-    }
-    else
-    {
-        // 使用支持中文的默认字体
-        PangoFontDescription* default_font = pango_font_description_from_string("Microsoft YaHei 12");
-        gtk_font_chooser_set_font_desc(GTK_FONT_CHOOSER(primary_font_button), default_font);
-        pango_font_description_free(default_font);
-    }
-
-    // 备选字体选择
-    GtkWidget* fallback_label = gtk_label_new("备选字体:");
-    gtk_widget_set_halign(fallback_label, GTK_ALIGN_START);
-
-    GtkWidget* fallback_font_button = gtk_font_button_new();
-    gtk_font_chooser_set_level(GTK_FONT_CHOOSER(fallback_font_button),
-                               GTK_FONT_CHOOSER_LEVEL_FAMILY | GTK_FONT_CHOOSER_LEVEL_STYLE | GTK_FONT_CHOOSER_LEVEL_SIZE);
-
-    // 设置当前备选字体
-    if (app->ui->fallback_font)
-    {
-        PangoFontDescription* font_desc = pango_font_description_from_string(app->ui->fallback_font);
-        gtk_font_chooser_set_font_desc(GTK_FONT_CHOOSER(fallback_font_button), font_desc);
-        pango_font_description_free(font_desc);
-    }
-    else
-    {
-        // 使用支持中文的备选字体
-        PangoFontDescription* default_font = pango_font_description_from_string("SimSun 12");
-        gtk_font_chooser_set_font_desc(GTK_FONT_CHOOSER(fallback_font_button), default_font);
-        pango_font_description_free(default_font);
-    }
-
-    GtkWidget* size_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* size_spin = gtk_spin_button_new_with_range(6, 144, 1);
-    PangoFontDescription* current_desc = pango_font_description_from_string(app->ui->primary_font);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(size_spin),
-        (gdouble)pango_font_description_get_size(current_desc) / PANGO_SCALE);
-    pango_font_description_free(current_desc);
-    gtk_box_pack_start(GTK_BOX(size_box), gtk_label_new("字号（磅）:"), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(size_box), size_spin, FALSE, FALSE, 0);
-    g_object_set_data(G_OBJECT(dialog), "font-size", size_spin);
-
-    // 预览文本
-    GtkWidget* preview_label = gtk_label_new("预览:");
-    gtk_widget_set_halign(preview_label, GTK_ALIGN_START);
-
-    GtkWidget* preview_text = gtk_text_view_new();
-    gtk_text_view_set_editable(GTK_TEXT_VIEW(preview_text), FALSE);
-    gtk_widget_set_size_request(preview_text, -1, 200);
-
-    GtkTextBuffer* preview_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(preview_text));
-    gtk_text_buffer_set_text(preview_buffer,
-                             "这是字体预览文本 Font Preview Text\n中文测试 English Test 123456\nAaBbCc 0123456789", -1);
-
-    GtkWidget* preview_scrolled = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(preview_scrolled),
-                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-    gtk_container_add(GTK_CONTAINER(preview_scrolled), preview_text);
-
-    // 添加到容器
-    gtk_box_pack_start(GTK_BOX(main_box), primary_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(main_box), primary_font_button, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(main_box), size_box, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(main_box), fallback_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(main_box), fallback_font_button, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(main_box), preview_label, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(main_box), preview_scrolled, TRUE, TRUE, 0);
-
-    gtk_container_add(GTK_CONTAINER(content_area), main_box);
-
-    g_object_set_data(G_OBJECT(size_spin), "preview", preview_text);
-    g_signal_connect(size_spin, "value-changed", G_CALLBACK(on_font_size_changed), primary_font_button);
-
-    // 字体变化时更新预览
-    g_signal_connect(primary_font_button, "font-set",
-                     G_CALLBACK(on_font_preview_update), preview_text);
-    g_signal_connect(fallback_font_button, "font-set",
-                     G_CALLBACK(on_font_preview_update), preview_text);
-
-    // 初始预览更新
-    update_font_preview(preview_text, primary_font_button, fallback_font_button);
-
-    gtk_widget_show_all(dialog);
-
-    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK)
-    {
-        // 获取选择的字体
-        PangoFontDescription* primary_desc = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(primary_font_button));
-        PangoFontDescription* fallback_desc = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(fallback_font_button));
-
-        gchar* primary_font = pango_font_description_to_string(primary_desc);
-        gchar* fallback_font = pango_font_description_to_string(fallback_desc);
-
-        // 保存字体设置
-        if (app->ui->primary_font)
-        {
-            g_free(app->ui->primary_font);
-        }
-        if (app->ui->fallback_font)
-        {
-            g_free(app->ui->fallback_font);
-        }
-
-        app->ui->primary_font = g_strdup(primary_font);
-        app->ui->fallback_font = g_strdup(fallback_font);
-
-        // 应用字体
-        apply_font_with_fallback(app, primary_font, fallback_font);
-
-        g_free(primary_font);
-        g_free(fallback_font);
-        pango_font_description_free(primary_desc);
-        pango_font_description_free(fallback_desc);
-    }
-
-    gtk_widget_destroy(dialog);
-}
-
-// 字体预览更新回调
-void on_font_preview_update(GtkWidget* font_button, gpointer data)
-{
-    GtkWidget* preview_text = (GtkWidget*)data;
-
-    // 获取对话框
-    GtkWidget* dialog = gtk_widget_get_toplevel(font_button);
-
-    // 找到两个字体按钮
-    GtkWidget* content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    GList* children = gtk_container_get_children(GTK_CONTAINER(content_area));
-    GtkWidget* main_box = GTK_WIDGET(children->data);
-    g_list_free(children);
-
-    children = gtk_container_get_children(GTK_CONTAINER(main_box));
-    GtkWidget* primary_font_button = NULL;
-    GtkWidget* fallback_font_button = NULL;
-
-    // 遍历找到字体按钮
-    for (GList* iter = children; iter != NULL; iter = iter->next)
-    {
-        if (GTK_IS_FONT_BUTTON(iter->data))
-        {
-            if (primary_font_button == NULL)
-            {
-                primary_font_button = GTK_WIDGET(iter->data);
-            }
-            else
-            {
-                fallback_font_button = GTK_WIDGET(iter->data);
-                break;
-            }
-        }
-    }
-    g_list_free(children);
-
-    if (primary_font_button && fallback_font_button)
-    {
-        GtkWidget* spin = g_object_get_data(G_OBJECT(dialog), "font-size");
-        if (font_button == primary_font_button && spin)
-        {
-            PangoFontDescription* desc = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(primary_font_button));
-            g_signal_handlers_block_by_func(spin, on_font_size_changed, primary_font_button);
-            gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin),
-                (gdouble)pango_font_description_get_size(desc) / PANGO_SCALE);
-            g_signal_handlers_unblock_by_func(spin, on_font_size_changed, primary_font_button);
-            pango_font_description_free(desc);
-        }
-        update_font_preview(preview_text, primary_font_button, fallback_font_button);
-    }
-}
-
 /* Each widget owns exactly one font provider. Reloading it also handles size-only edits. */
 static void set_widget_font(GtkWidget* widget, const PangoFontDescription* primary,
                             const PangoFontDescription* fallback)
@@ -908,26 +691,23 @@ static void set_widget_font(GtkWidget* widget, const PangoFontDescription* prima
     gchar size[G_ASCII_DTOSTR_BUF_SIZE];
     g_ascii_dtostr(size, sizeof(size), (gdouble)pango_font_description_get_size(primary) / PANGO_SCALE);
     PangoStyle style = pango_font_description_get_style(primary);
+    const gchar* stretches[] =
+    {
+        "ultra-condensed", "extra-condensed", "condensed", "semi-condensed", "normal",
+        "semi-expanded", "expanded", "extra-expanded", "ultra-expanded"
+    };
     gchar* css = g_strdup_printf(
         "textview { font-family: \"%s\", \"%s\", sans-serif; font-size: %s%s; "
-        "font-weight: %d; font-style: %s; }",
+        "font-weight: %d; font-style: %s; font-stretch: %s; }",
         escaped_family, escaped_fallback, size,
         pango_font_description_get_size_is_absolute(primary) ? "px" : "pt",
-        pango_font_description_get_weight(primary),
-        style == PANGO_STYLE_ITALIC ? "italic" : style == PANGO_STYLE_OBLIQUE ? "oblique" : "normal");
+        CLAMP(((pango_font_description_get_weight(primary) + 50) / 100) * 100, 100, 900),
+        style == PANGO_STYLE_ITALIC ? "italic" : style == PANGO_STYLE_OBLIQUE ? "oblique" : "normal",
+        stretches[CLAMP(pango_font_description_get_stretch(primary), 0, 8)]);
     gtk_css_provider_load_from_data(provider, css, -1, NULL);
     g_free(css);
     g_free(escaped_family);
     g_free(escaped_fallback);
-}
-
-void update_font_preview(GtkWidget* preview_text, GtkWidget* primary_button, GtkWidget* fallback_button)
-{
-    PangoFontDescription* primary = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(primary_button));
-    PangoFontDescription* fallback = gtk_font_chooser_get_font_desc(GTK_FONT_CHOOSER(fallback_button));
-    set_widget_font(preview_text, primary, fallback);
-    pango_font_description_free(primary);
-    pango_font_description_free(fallback);
 }
 
 void apply_font_with_fallback(NotepadApp* app, const gchar* primary_font, const gchar* fallback_font)

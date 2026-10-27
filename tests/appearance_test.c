@@ -27,7 +27,87 @@ static gboolean change_dialog_size(gpointer data)
             GtkWidget* spin = g_object_get_data(G_OBJECT(item->data), "font-size");
             if (spin)
             {
+                GtkWidget* family = g_object_get_data(G_OBJECT(item->data), "font-family");
+                GtkWidget* face = g_object_get_data(G_OBJECT(item->data), "font-face");
+                GtkWidget* fallback = g_object_get_data(G_OBJECT(item->data), "font-fallback");
+                g_assert_nonnull(fallback);
+                g_assert_true(gtk_widget_get_visible(fallback));
+                g_assert_nonnull(family);
+                g_assert_nonnull(face);
+                GtkTreeModel* model = gtk_combo_box_get_model(GTK_COMBO_BOX(family));
+                GtkTreeIter iter;
+                gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
+                while (valid)
+                {
+                    gchar* name = NULL;
+                    gtk_tree_model_get(model, &iter, 0, &name, -1);
+                    g_assert_cmpint(g_ascii_strcasecmp(name, "monospace"), !=, 0);
+                    g_assert_cmpint(g_ascii_strcasecmp(name, "Sans"), !=, 0);
+                    g_free(name);
+                    valid = gtk_tree_model_iter_next(model, &iter);
+                }
+                gboolean list_mode = FALSE;
+                gtk_widget_style_get(family, "appears-as-list", &list_mode, NULL);
+                g_assert_true(list_mode);
+                AtkObject* accessible = gtk_combo_box_get_popup_accessible(GTK_COMBO_BOX(family));
+                GtkWidget* tree = gtk_accessible_get_widget(GTK_ACCESSIBLE(accessible));
+                g_assert_true(GTK_IS_TREE_VIEW(tree));
+                g_assert_true(gtk_tree_view_get_fixed_height_mode(GTK_TREE_VIEW(tree)));
+                GtkWidget* scroll = gtk_widget_get_ancestor(tree, GTK_TYPE_SCROLLED_WINDOW);
+                g_assert_nonnull(scroll);
+                GtkPolicyType vertical;
+                gtk_scrolled_window_get_policy(GTK_SCROLLED_WINDOW(scroll), NULL, &vertical);
+                g_assert_cmpint(vertical, ==, GTK_POLICY_ALWAYS);
+                gint64 popup_started = g_get_monotonic_time();
+                gtk_combo_box_popup(GTK_COMBO_BOX(family));
+                flush_styles();
+                GtkWidget* bar = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(scroll));
+                GtkWidget* popup_window = gtk_widget_get_toplevel(tree);
+                gint bar_x, bar_y, root_x, root_y;
+                gtk_widget_translate_coordinates(bar, popup_window, 0, 0, &bar_x, &bar_y);
+                gdk_window_get_origin(gtk_widget_get_window(popup_window), &root_x, &root_y);
+                GdkEvent* drag = gdk_event_new(GDK_BUTTON_PRESS);
+                drag->button.window = g_object_ref(gtk_widget_get_window(popup_window));
+                drag->button.button = GDK_BUTTON_PRIMARY;
+                drag->button.x_root = root_x + bar_x + gtk_widget_get_allocated_width(bar) / 2;
+                drag->button.y_root = root_y + bar_y + 20;
+                gdk_event_set_device(drag, gdk_seat_get_pointer(gdk_display_get_default_seat(
+                    gtk_widget_get_display(bar))));
+                gtk_widget_event(popup_window, drag);
+                GtkAdjustment* adjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(scroll));
+                gdouble target = (gtk_adjustment_get_upper(adjustment) -
+                    gtk_adjustment_get_page_size(adjustment)) / 2.0;
+                gtk_adjustment_set_value(adjustment, target);
+                g_assert_cmpfloat(gtk_adjustment_get_value(adjustment), >, 0.0);
+                drag->type = GDK_BUTTON_RELEASE;
+                drag->button.x_root -= 30;
+                drag->button.y_root += 100;
+                gtk_widget_event(popup_window, drag);
+                gdk_event_free(drag);
+                gboolean still_open = FALSE;
+                g_object_get(family, "popup-shown", &still_open, NULL);
+                g_assert_true(still_open);
+                gtk_combo_box_popdown(GTK_COMBO_BOX(family));
+                gtk_combo_box_popup(GTK_COMBO_BOX(fallback));
+                flush_styles();
+                gtk_combo_box_popdown(GTK_COMBO_BOX(fallback));
+                if (g_getenv("NOTEPAD_FONT_TIMING"))
+                {
+                    g_print("font scrollable popups including event flush: %.2f ms\n",
+                        (g_get_monotonic_time() - popup_started) / 1000.0);
+                }
+                gint original_face = gtk_combo_box_get_active(GTK_COMBO_BOX(face));
+                gint faces = gtk_tree_model_iter_n_children(
+                    gtk_combo_box_get_model(GTK_COMBO_BOX(face)), NULL);
+                for (gint i = 0; i < faces; ++i)
+                {
+                    gtk_combo_box_set_active(GTK_COMBO_BOX(face), i);
+                }
+                gtk_combo_box_set_active(GTK_COMBO_BOX(face), original_face);
+                gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), 28);
+                gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), 29);
                 gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), 30);
+                flush_styles();
                 gtk_dialog_response(GTK_DIALOG(item->data), GTK_RESPONSE_OK);
                 changed = TRUE;
                 break;
@@ -190,6 +270,7 @@ int main(int argc, char** argv)
     pango_font_description_free(small);
     pango_font_description_free(large);
 
+    PangoFontDescription* original_fallback = pango_font_description_from_string(app->ui->fallback_font);
     PangoFontDescription* original = pango_font_description_from_string(app->ui->primary_font);
     g_timeout_add(50, change_dialog_size, NULL);
     on_font_selection(NULL, app);
@@ -197,6 +278,11 @@ int main(int argc, char** argv)
     g_assert_cmpstr(pango_font_description_get_family(original), ==,
         pango_font_description_get_family(selected));
     g_assert_cmpint(pango_font_description_get_size(selected), ==, 30 * PANGO_SCALE);
+    PangoFontDescription* selected_fallback = pango_font_description_from_string(app->ui->fallback_font);
+    g_assert_cmpstr(pango_font_description_get_family(original_fallback), ==,
+        pango_font_description_get_family(selected_fallback));
+    pango_font_description_free(original_fallback);
+    pango_font_description_free(selected_fallback);
     pango_font_description_free(original);
     pango_font_description_free(selected);
 

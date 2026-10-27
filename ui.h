@@ -111,11 +111,7 @@ extern void on_text_delete(GtkTextBuffer* buffer, GtkTextIter* start, GtkTextIte
 // 字体设置相关
 extern void on_font_selection(GtkWidget* widget, gpointer data);
 
-extern void update_font_preview(GtkWidget* preview_text, GtkWidget* primary_button, GtkWidget* fallback_button);
-
 extern void apply_font_with_fallback(NotepadApp* app, const gchar* primary_font, const gchar* fallback_font);
-
-extern void on_font_preview_update(GtkWidget* font_button, gpointer data);
 
 
 // 背景设置相关
